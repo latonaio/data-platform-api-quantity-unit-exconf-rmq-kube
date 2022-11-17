@@ -78,17 +78,22 @@ data-platform-api-quantity-unit-exconf-rmq-kube では、[golang-logging-library
 
 ```
 {
-	"cursor": "/Users/latona2/bitbucket/data-platform-api-quantity-unit-exconf-rmq-kube/main.go#L69",
-	"function": "main.dataCallProcess",
-	"level": "INFO",
-	"message": {
-		"QuantityUnit": {
-			"QuantityUnit": "KG",
-			"ExistenceConf": true
-		}
-	},
+	"connection_key": "request",
+	"result": true,
+	"redis_key": "abcdefg",
+	"filepath": "/var/lib/aion/Data/rededge_sdc/abcdef.json",
+	"api_status_code": 200,
 	"runtime_session_id": "boi9ar543dg91ipdnspi099u231280ab0v8af0ew",
-	"time": "2022-11-17T15:14:23+09:00"
+	"business_partner": 201,
+	"service_label": "ORDERS",
+	"QuantityUnit": {
+		"QuantityUnit": "KG",
+		"ExistenceConf": true
+	},
+	"api_schema": "DPFMOrdersCreates",
+	"accepter": ["Header"],
+	"order_id": 1,
+	"deleted": false
 }
 ```
 
