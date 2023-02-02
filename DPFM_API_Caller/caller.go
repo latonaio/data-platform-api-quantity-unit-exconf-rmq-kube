@@ -4,10 +4,12 @@ import (
 	"context"
 	dpfm_api_input_reader "data-platform-api-quantity-unit-exconf-rmq-kube/DPFM_API_Input_Reader"
 	dpfm_api_output_formatter "data-platform-api-quantity-unit-exconf-rmq-kube/DPFM_API_Output_Formatter"
-	"data-platform-api-quantity-unit-exconf-rmq-kube/database"
-	"sync"
+	"encoding/json"
 
 	"github.com/latonaio/golang-logging-library-for-data-platform/logger"
+	database "github.com/latonaio/golang-mysql-network-connector"
+	rabbitmq "github.com/latonaio/rabbitmq-golang-client-for-data-platform"
+	"golang.org/x/xerrors"
 )
 
 type ExistenceConf struct {
@@ -24,61 +26,56 @@ func NewExistenceConf(ctx context.Context, db *database.Mysql, l *logger.Logger)
 	}
 }
 
-func (e *ExistenceConf) Conf(input *dpfm_api_input_reader.SDC) *dpfm_api_output_formatter.QuantityUnit {
-	quantityUnit := *input.QuantityUnit.QuantityUnit
-	notKeyExistence := make([]string, 0, 1)
-	KeyExistence := make([]string, 0, 1)
+func (e *ExistenceConf) Conf(msg rabbitmq.RabbitmqMessage) interface{} {
+	var ret interface{}
+	ret = map[string]interface{}{
+		"ExistenceConf": false,
+	}
+	input := make(map[string]interface{})
+	err := json.Unmarshal(msg.Raw(), &input)
+	if err != nil {
+		return ret
+	}
 
-	existData := &dpfm_api_output_formatter.QuantityUnit{
-		QuantityUnit:       quantityUnit,
+	_, ok := input["QuantityUnit"]
+	if ok {
+		input := &dpfm_api_input_reader.SDC{}
+		err = json.Unmarshal(msg.Raw(), input)
+		ret = e.confQuantityUnit(input)
+		goto endProcess
+	}
+
+	err = xerrors.Errorf("can not get exconf check target")
+endProcess:
+	if err != nil {
+		e.l.Error(err)
+	}
+	return ret
+}
+
+func (e *ExistenceConf) confQuantityUnit(input *dpfm_api_input_reader.SDC) *dpfm_api_output_formatter.QuantityUnit {
+	exconf := dpfm_api_output_formatter.QuantityUnit{
+		ExistenceConf: false,
+	}
+	if input.QuantityUnit.QuantityUnit == nil {
+		return &exconf
+	}
+	exconf = dpfm_api_output_formatter.QuantityUnit{
+		QuantityUnit:  *input.QuantityUnit.QuantityUnit,
 		ExistenceConf: false,
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if !e.confQuantityUnit(quantityUnit) {
-			notKeyExistence = append(notKeyExistence, quantityUnit)
-			return
-		}
-		KeyExistence = append(KeyExistence, quantityUnit)
-	}()
-
-	wg.Wait()
-
-	if len(KeyExistence) == 0 {
-		return existData
-	}
-	if len(notKeyExistence) > 0 {
-		return existData
-	}
-
-	existData.ExistenceConf = true
-	return existData
-}
-
-func (e *ExistenceConf) confQuantityUnit(val string) bool {
 	rows, err := e.db.Query(
 		`SELECT QuantityUnit 
 		FROM DataPlatformMastersAndTransactionsMysqlKube.data_platform_quantity_unit_quantity_unit_data 
-		WHERE QuantityUnit = ?;`, val,
+		WHERE QuantityUnit = ?;`, exconf.QuantityUnit,
 	)
 	if err != nil {
 		e.l.Error(err)
-		return false
+		return &exconf
 	}
+	defer rows.Close()
 
-	for rows.Next() {
-		var quantityUnit string
-		err := rows.Scan(&quantityUnit)
-		if err != nil {
-			e.l.Error(err)
-			continue
-		}
-		if quantityUnit == val {
-			return true
-		}
-	}
-	return false
+	exconf.ExistenceConf = rows.Next()
+	return &exconf
 }
